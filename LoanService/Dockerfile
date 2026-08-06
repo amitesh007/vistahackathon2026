@@ -20,7 +20,7 @@ RUN ./gradlew dependencies --no-daemon 2>/dev/null || true
 
 # Copy the full source and build the fat JAR
 COPY src ./src
-RUN ./gradlew bootJar --no-daemon
+RUN chmod +x gradlew && ./gradlew bootJar --no-daemon
 
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM eclipse-temurin:17-jre-alpine
