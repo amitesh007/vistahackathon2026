@@ -1,0 +1,75 @@
+# Docker Compose for GitHub Codespaces devcontainer
+#
+# Three services:
+#   devtools        – thin Ubuntu shell that VS Code connects to (workspace)
+#   loan-service    – LoanService Spring Boot API, pulled from GHCR
+#   loan-service-ui – Angular/Nginx UI, pulled from GHCR
+#
+# Image references are driven by the .env file in this directory.
+# The CI workflow updates .env on every successful build.
+#
+# Internal networking:
+#   loan-service is aliased as "backend-service" on port 8081 so the
+#   nginx.conf proxy rule (proxy_pass http://backend-service:8081/api/)
+#   resolves correctly without any config changes.
+#
+# Forwarded ports (Codespace makes these public):
+#   8080  →  LoanService REST API   (Postman / cURL / browser)
+#   4200  →  loan.service.ui        (browser)
+
+version: '3.8'
+
+services:
+
+  # ── Devtools shell (VS Code workspace container) ─────────────────────────
+  devtools:
+    image: mcr.microsoft.com/devcontainers/base:ubuntu-22.04
+    volumes:
+      - ..:/workspace:cached
+    # Keep the container alive so VS Code can attach
+    command: sleep infinity
+    networks:
+      - loan-net
+
+  # ── LoanService – Spring Boot REST API ───────────────────────────────────
+  loan-service:
+    image: ${LOAN_SERVICE_IMAGE}
+    container_name: loan-service
+    hostname: backend-service          # matches nginx proxy_pass hostname
+    environment:
+      # Override the embedded-server port so nginx can reach it on 8081
+      - SERVER_PORT=8081
+      - SPRING_PROFILES_ACTIVE=dev
+    ports:
+      # host:8080 → container:8081  (direct Postman / cURL / Codespace URL)
+      - "8080:8081"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      loan-net:
+        aliases:
+          # nginx.conf uses "backend-service" as the upstream name
+          - backend-service
+
+  # ── loan.service.ui – Angular served by Nginx ────────────────────────────
+  loan-service-ui:
+    image: ${LOAN_SERVICE_UI_IMAGE}
+    container_name: loan-service-ui
+    ports:
+      # host:4200 → container:80  (browser / Codespace URL)
+      - "4200:80"
+    depends_on:
+      loan-service:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - loan-net
+
+networks:
+  loan-net:
+    driver: bridge
