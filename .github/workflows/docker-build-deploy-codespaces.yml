@@ -162,7 +162,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      codespaces: write
     outputs:
       codespace_name: ${{ steps.codespace.outputs.name }}
       backend_url: ${{ steps.urls.outputs.backend_url }}
