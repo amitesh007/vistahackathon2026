@@ -1,0 +1,42 @@
+<div class="dashboard">
+  <!-- Welcome Header -->
+  <div class="dashboard-header">
+    <div class="welcome-section">
+      <h2 class="welcome-title">Welcome</h2>
+      <h1 class="user-name">{{ userName }}</h1>
+      <p class="last-login">Last Login: {{ lastLogin }}</p>
+    </div>
+    
+    <div class="datetime-section">
+      <p class="datetime-label">Date & Time</p>
+      <h2 class="current-time">{{ currentDateTime | date:'h:mm:ss a' }}</h2>
+      <p class="current-date">{{ currentDateTime | date:'EEEE, d MMMM y (GMT)' }}</p>
+    </div>
+  </div>
+
+  <!-- World Map Section -->
+  <!-- <div class="dashboard-section">
+    <app-world-map></app-world-map>
+  </div> -->
+
+  <!-- Main Content Grid -->
+  <div class="dashboard-grid">
+    <!-- Left Column -->
+    <div class="dashboard-col-left">
+      <!-- Pending Approvals -->
+      <app-pending-approvals></app-pending-approvals>
+      
+      <!-- Customers Onboarded Chart -->
+      <app-customers-chart></app-customers-chart>
+    </div>
+
+    <!-- Right Column -->
+    <div class="dashboard-col-right">
+      <!-- Calendar Widget -->
+      <app-calendar-widget></app-calendar-widget>
+      
+      <!-- Task Status -->
+      <app-task-status></app-task-status>
+    </div>
+  </div>
+</div>

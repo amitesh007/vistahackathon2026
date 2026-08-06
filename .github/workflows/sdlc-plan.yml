@@ -1,0 +1,72 @@
+name: SDLC Plan
+
+# =============================================================================
+# PHASE 1 of the SDLC harness. Manually dispatched.
+# Writes the plan onto branch harness/plan/<KEY> and opens a PLAN PR.
+# MERGING that PR is the approval — it triggers sdlc-execute.yml (phase 2).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      jira_key:
+        description: "Jira key to run through the harness (e.g. MPSSC-43084)"
+        required: true
+        type: string
+
+env:
+  PLANS_DIR: .github/agents/plans
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.Hackathon_Workflow }}   # PAT → push branch + create PR without the org setting
+
+      - name: Invoke Planner (host-orchestrator, plan mode)
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          REPO: ${{ github.repository }}
+          JIRA_KEY: ${{ inputs.jira_key }}
+        run: |
+          PLAN="${PLANS_DIR}/PLAN-${JIRA_KEY}.md"
+          PROMPT="Run the SDLC harness in PLAN mode for Jira story ${JIRA_KEY}. Read the story, classify UI/API/QA/Deploy tracks against the repo, and write the execution plan to ${PLAN}. Do NOT dispatch sub-agents. Stop at the human approval checkpoint."
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${REPO}/copilot/agents/host-orchestrator/completions" \
+            -d "$(jq -n --arg p "$PROMPT" '{messages:[{role:"user",content:$p}]}')")
+          echo "$RESPONSE" | jq -r '.choices[0].message.content // "::warning::planner returned no content"'
+
+      - name: Open plan PR
+        env:
+          GH_TOKEN: ${{ secrets.Hackathon_Workflow }}
+          JIRA_KEY: ${{ inputs.jira_key }}
+        run: |
+          BR="harness/plan/${JIRA_KEY}"
+          git config user.name  "sdlc-harness-bot"
+          git config user.email "sdlc-harness-bot@users.noreply.github.com"
+          git checkout -B "$BR"
+          git add "${PLANS_DIR}/PLAN-${JIRA_KEY}.md" || true
+          git diff --cached --quiet && echo "no plan changes" \
+            || git commit -m "Harness: plan ${JIRA_KEY} — run ${{ github.run_id }}"
+          git push -u origin "$BR" --force-with-lease
+          gh pr view "$BR" >/dev/null 2>&1 \
+            || gh pr create --base "${{ github.event.repository.default_branch }}" --head "$BR" \
+                 --title "SDLC ${JIRA_KEY}: plan" \
+                 --body "Phase 1 plan. **Merge this PR to approve** — it triggers phase 2 (execute)."
+          URL=$(gh pr view "$BR" --json url -q '.url')
+          {
+            echo "## ⛔ CHECKPOINT 1 — review + MERGE the plan PR"
+            echo ""
+            echo "Plan PR: ${URL}"
+            echo ""
+            echo "Merging it approves the plan and triggers phase 2 (SDLC Execute)."
+          } >> "$GITHUB_STEP_SUMMARY"

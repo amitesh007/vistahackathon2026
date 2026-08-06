@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "figma": {
+      "type": "http",
+      "url": "https://mcp.figma.com/sse",
+      "headers": {
+        "X-Figma-Token": "${FIGMA_API_TOKEN}"
+      }
+    },
+    "jira": {
+      "type": "stdio",
+      "command": "node",
+      "args": [".github/JiraMCP/package/dist/index.js"],
+      "env": {
+        "JIRA_URL": "${JIRA_URL}",
+        "JIRA_PAT": "${JIRA_PAT}",
+        "JIRA_AUTH_TYPE": "${JIRA_AUTH_TYPE}"
+      }
+    }
+  }
+}

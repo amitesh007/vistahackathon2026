@@ -1,0 +1,16 @@
+{
+  "servers": {
+    "jira": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/mcp-server/dist/index.js"],
+      "env": {
+        "JIRA_URL": "${env:JIRA_URL}",
+        "JIRA_EMAIL": "${env:JIRA_EMAIL}",
+        "JIRA_API_TOKEN": "${env:JIRA_API_TOKEN}",
+        "JIRA_AUTH_TYPE": "${env:JIRA_AUTH_TYPE}",
+        "JIRA_API_VERSION": "${env:JIRA_API_VERSION}"
+      }
+    }
+  }
+}

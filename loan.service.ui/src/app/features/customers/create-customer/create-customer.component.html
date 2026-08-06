@@ -1,0 +1,166 @@
+<div class="page-container">
+  <div class="form-card">
+    <div class="form-card-header">
+      <h2 class="form-card-title">Create Customer</h2>
+    </div>
+
+    <div class="form-card-body">
+      <form [formGroup]="customerForm" (ngSubmit)="onSave()">
+
+        <!-- General Section -->
+        <div class="form-section">
+          <h3 class="section-title">General</h3>
+          <div class="form-grid form-grid-4">
+            <div class="form-field">
+              <input appFormField type="text" class="form-input" formControlName="customerName" placeholder="Customer Name*" />
+              <span class="error-msg" *ngIf="isInvalid('customerName')">Required</span>
+            </div>
+            <div class="form-field">
+              <input appFormField type="text" class="form-input" formControlName="abbreviatedName" placeholder="Abbreviated Name*" />
+              <span class="error-msg" *ngIf="isInvalid('abbreviatedName')">Required</span>
+            </div>
+            <div class="form-field">
+              <input appFormField type="text" class="form-input" formControlName="correspondenceLanguage"
+                placeholder="Correspondence Language*" />
+              <span class="error-msg" *ngIf="isInvalid('correspondenceLanguage')">Required</span>
+            </div>
+            <div class="form-field">
+              <input appFormField type="text" class="form-input" formControlName="baseCurrency" placeholder="Base Currency*" />
+              <span class="error-msg" *ngIf="isInvalid('baseCurrency')">Required</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Address Section -->
+        <div class="form-section">
+          <h3 class="section-title">Address</h3>
+          <div class="tab-group">
+            <button type="button" class="tab-btn" [class.active]="activeAddressTab === 'postal'"
+              (click)="setTab('postal')">Postal</button>
+            <button type="button" class="tab-btn" [class.active]="activeAddressTab === 'swift'"
+              (click)="setTab('swift')">SWIFT</button>
+          </div>
+
+          <div *ngIf="activeAddressTab === 'postal'" formGroupName="postalAddress">
+            <div class="form-grid form-grid-3">
+              <div class="form-field">
+                <input appFormField type="text" class="form-input" formControlName="streetName" placeholder="Street Name" />
+              </div>
+              <div class="form-field">
+                <input appFormField type="text" class="form-input" formControlName="town" placeholder="Town" />
+              </div>
+              <div class="form-field">
+                <input appFormField type="text" class="form-input" formControlName="countrySubdivision"
+                  placeholder="Country Subdivision" />
+              </div>
+            </div>
+            <div class="form-grid form-grid-3">
+              <div class="form-field">
+                <input appFormField type="text" class="form-input" formControlName="postCode" placeholder="Post Code" />
+              </div>
+              <div class="form-field">
+                <input appFormField type="text" class="form-input" formControlName="countryCode" placeholder="Country Code*" />
+                <span class="error-msg" *ngIf="isGroupInvalid('postalAddress', 'countryCode')">Required</span>
+              </div>
+              <div class="form-field">
+                <input appFormField type="text" class="form-input" formControlName="contractReference"
+                  placeholder="Contract Reference" />
+              </div>
+            </div>
+          </div>
+
+          <div *ngIf="activeAddressTab === 'swift'" formGroupName="swiftAddress">
+            <div class="form-grid form-grid-3">
+              <div class="form-field">
+                <input appFormField type="text" class="form-input" formControlName="bic" placeholder="BIC Code" />
+              </div>
+              <div class="form-field">
+                <input appFormField type="text" class="form-input" formControlName="swiftName" placeholder="SWIFT Name" />
+              </div>
+              <div class="form-field">
+                <input appFormField type="text" class="form-input" formControlName="swiftCountry" placeholder="Country Code" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Other Details Section -->
+        <div class="form-section">
+          <h3 class="section-title">Other Details</h3>
+          <div class="form-grid form-grid-4">
+            <div class="form-field">
+              <input appFormField type="text" class="form-input" formControlName="contactName" placeholder="Contact Name" />
+            </div>
+            <div class="form-field">
+              <input appFormField type="text" class="form-input" formControlName="contactNumber" placeholder="Contact Number" />
+            </div>
+            <div class="form-field">
+              <input appFormField type="text" class="form-input" formControlName="sirenNbAndCountry"
+                placeholder="SIREN nb and Country" />
+            </div>
+            <div class="form-field">
+              <input appFormField type="text" class="form-input" formControlName="fax" placeholder="Fax" />
+            </div>
+            <div class="form-field">
+              <input appFormField type="text" class="form-input" formControlName="telex" placeholder="Telex" />
+            </div>
+            <div class="form-field">
+              <input appFormField type="text" class="form-input" formControlName="bei" placeholder="BEI" />
+            </div>
+            <div class="form-field">
+              <input appFormField type="email" class="form-input" formControlName="email" placeholder="E-mail" />
+            </div>
+            <div class="form-field">
+              <input appFormField type="email" class="form-input" formControlName="crmEmail" placeholder="CRM E-mail" />
+            </div>
+            <div class="form-field">
+              <input appFormField type="url" class="form-input" formControlName="webAddress" placeholder="Web Address" />
+            </div>
+            <div class="form-field">
+              <select class="form-input form-select" formControlName="legalIdType">
+                <option value="" disabled selected>Legal ID Type</option>
+                <option value="passport">Passport</option>
+                <option value="national_id">National ID</option>
+                <option value="tax_id">Tax ID</option>
+                <option value="business_reg">Business Registration</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <input appFormField type="text" class="form-input" formControlName="legalEntityIdentifier"
+                placeholder="Legal Entity Identifier" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Permissions Section -->
+        <div class="form-section">
+          <h3 class="section-title">Permission(s)</h3>
+          <button type="button" class="add-permission-btn" (click)="addPermission()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Add Permission
+          </button>
+          <div class="permissions-list" *ngIf="permissions.length > 0">
+            <div class="permission-tag" *ngFor="let perm of permissions; let i = index">
+              <span>{{ perm }}</span>
+              <button type="button" class="remove-perm-btn" (click)="removePermission(i)" aria-label="Remove">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </form>
+    </div>
+
+    <div class="form-card-footer">
+      <button type="button" class="btn btn-ghost" (click)="onCancel()">Cancel</button>
+      <button type="button" class="btn btn-primary" (click)="onSave()">Submit</button>
+    </div>
+  </div>
+</div>

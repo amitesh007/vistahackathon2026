@@ -1,0 +1,49 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "gradle: build LoanService",
+      "type": "shell",
+      "command": ".\\gradlew.bat bootJar",
+      "options": {
+        "cwd": "${workspaceFolder}/LoanService"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "gradle: bootRun LoanService",
+      "type": "shell",
+      "command": ".\\gradlew.bat bootRun",
+      "options": {
+        "cwd": "${workspaceFolder}/LoanService"
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": [
+        {
+          "pattern": [
+            {
+              "regexp": ".",
+              "file": 1,
+              "location": 2,
+              "message": 3
+            }
+          ],
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "Starting LoanService",
+            "endsPattern": "Started LoanServiceApplication"
+          }
+        }
+      ]
+    }
+  ]
+}

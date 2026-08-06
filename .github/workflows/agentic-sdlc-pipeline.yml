@@ -1,0 +1,339 @@
+﻿name: Agentic SDLC Pipeline
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 0 — User inputs
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  workflow_dispatch:
+    inputs:
+      jira_ticket:
+        description: "Jira ticket ID (e.g. MPSSC-43084)"
+        required: true
+        type: string
+      jira_base_url:
+        description: "Jira base URL (e.g. https://jira.yourcompany.com)"
+        required: true
+        type: string
+      figma_url:
+        description: "Figma design URL for the UI screen"
+        required: true
+        type: string
+
+concurrency:
+  group: sdlc-${{ github.event.inputs.jira_ticket }}
+  cancel-in-progress: false
+
+env:
+  TICKET:     ${{ github.event.inputs.jira_ticket }}
+  JIRA_URL:   ${{ github.event.inputs.jira_base_url }}
+  FIGMA_URL:  ${{ github.event.inputs.figma_url }}
+  PLAN_DIR:   .github/plan-output/${{ github.event.inputs.jira_ticket }}
+  ASSETS_DIR: assets/${{ github.event.inputs.jira_ticket }}
+
+jobs:
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 1 — SDLC Planner Agent
+# Connects to the Jira MCP server, generates five artifacts under
+# .github/plan-output/<KEY>/ and downloads Jira attachments to assets/<KEY>/
+# ─────────────────────────────────────────────────────────────────────────────
+  planner:
+    name: "Step 1 — SDLC Planner Agent"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      models: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            mcp-server/package-lock.json
+            agent/package-lock.json
+
+      - name: Build Jira MCP server
+        run: cd mcp-server && npm ci && npm run build
+
+      - name: Build agent CLI
+        run: cd agent && npm ci && npm run build
+
+      # 1a — Fetch Jira story and generate the four analysis documents
+      - name: Fetch Jira data and generate analysis artifacts
+        env:
+          JIRA_API_TOKEN:   ${{ secrets.JIRA_PAT }}
+          JIRA_AUTH_TYPE:   ${{ secrets.JIRA_AUTH_TYPE }}
+          JIRA_API_VERSION: "2"
+          GITHUB_TOKEN:     ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd agent
+          node dist/index.js "${{ env.TICKET }}"
+
+      # 1b — Download file attachments from the Jira ticket
+      - name: Download Jira attachments
+        env:
+          JIRA_API_TOKEN:   ${{ secrets.JIRA_PAT }}
+          JIRA_AUTH_TYPE:   ${{ secrets.JIRA_AUTH_TYPE }}
+          JIRA_API_VERSION: "2"
+          ASSETS_DIR:       ${{ github.workspace }}/${{ env.ASSETS_DIR }}
+          TICKET:           ${{ env.TICKET }}
+        run: |
+          cd agent
+          node --input-type=module << 'SCRIPT'
+          import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+          import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+          import path from "path";
+          import { fileURLToPath } from "url";
+          const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+          const transport = new StdioClientTransport({
+            command: "node",
+            args: [path.join(root, "mcp-server/dist/index.js")],
+            env: Object.fromEntries(
+              Object.entries(process.env).filter(([k]) => k.startsWith("JIRA_") || k === "ASSETS_DIR")
+            ),
+          });
+          const client = new Client({ name: "ci-downloader", version: "1" }, { capabilities: {} });
+          await client.connect(transport);
+          const r = await client.callTool({
+            name: "jira_download_attachments",
+            arguments: { issueKey: process.env.TICKET, targetDir: process.env.ASSETS_DIR },
+          });
+          console.log(r.content[0].text);
+          await client.close();
+          SCRIPT
+
+      # 1c — Invoke SDLC Planner via GitHub Models to produce PLAN-<KEY>.md
+      - name: Run SDLC Planner agent — generate execution plan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TICKET="${{ env.TICKET }}"
+          PLAN_DIR="${{ env.PLAN_DIR }}"
+          mkdir -p "${PLAN_DIR}"
+
+          AGENT_SYSTEM=$(awk '/^---/{if(++n==2){found=1;next}} found{print}' \
+                         .github/agents/planner.agent.md)
+
+          REQ=$(cat  "output/${TICKET}-requirements.md" 2>/dev/null || echo "")
+          SPEC=$(cat "output/${TICKET}-spec.md"         2>/dev/null || echo "")
+          TC=$(cat   "output/${TICKET}-testcases.md"    2>/dev/null || echo "")
+          DES=$(cat  "output/${TICKET}-design.md"       2>/dev/null || echo "")
+          ATTACH=$(ls "${{ env.ASSETS_DIR }}/" 2>/dev/null | paste -sd ',' || echo "none")
+
+          USER_PROMPT="Jira ticket: ${TICKET}
+          Jira base URL: ${{ env.JIRA_URL }}
+          Figma URL: ${{ env.FIGMA_URL }}
+          Downloaded attachments: ${ATTACH}
+
+          == REQUIREMENTS ==
+          ${REQ}
+          == SPECIFICATION ==
+          ${SPEC}
+          == TEST CASES ==
+          ${TC}
+          == DESIGN ==
+          ${DES}
+
+          Using all the above, produce PLAN-${TICKET}.md — the execution plan with
+          UI/API/QA/Deploy track DAG. Include the Figma URL (${{ env.FIGMA_URL }})
+          in the UI track for the ANGULAR_UI agent.
+          Return ONLY the plan file contents."
+
+          PAYLOAD=$(jq -n \
+            --arg sys "$AGENT_SYSTEM" \
+            --arg usr "$USER_PROMPT" \
+            '{ model:"gpt-4o",
+               messages:[{role:"system",content:$sys},{role:"user",content:$usr}],
+               max_tokens:4096 }')
+
+          RESP=$(curl -s -X POST \
+            "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          if [ -z "$RESP" ]; then
+            echo "::error::Empty response from GitHub Models API (network error or auth failure)"
+            exit 1
+          fi
+
+          if echo "$RESP" | jq -e '.error' >/dev/null 2>&1; then
+            echo "::error::GitHub Models error: $(echo "$RESP" | jq -r '.error.message')"
+            exit 1
+          fi
+
+          # Write PLAN and copy the four analysis docs into PLAN_DIR
+          echo "$RESP" | jq -r '.choices[0].message.content' > "${PLAN_DIR}/PLAN-${TICKET}.md"
+          for f in requirements spec testcases design; do
+            cp "output/${TICKET}-${f}.md" "${PLAN_DIR}/" 2>/dev/null || true
+          done
+
+          echo "::notice::Plan written to ${PLAN_DIR}/PLAN-${TICKET}.md"
+          head -30 "${PLAN_DIR}/PLAN-${TICKET}.md"
+
+      - name: Upload planner artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: planner-artifacts-${{ env.TICKET }}
+          path: |
+            ${{ env.PLAN_DIR }}/
+            ${{ env.ASSETS_DIR }}/
+          retention-days: 30
+          if-no-files-found: warn
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 2 — Raise Pull Request
+# Commits all planner artifacts to a feature branch and opens a PR → master
+# ─────────────────────────────────────────────────────────────────────────────
+  raise-pr:
+    name: "Step 2 — Raise Pull Request"
+    runs-on: ubuntu-latest
+    needs: planner
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download planner artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: planner-artifacts-${{ env.TICKET }}
+          path: pr-staging/
+
+      - name: Restore artifacts to repo layout
+        run: |
+          TICKET="${{ env.TICKET }}"
+          mkdir -p "${{ env.PLAN_DIR }}" "${{ env.ASSETS_DIR }}"
+
+          find pr-staging/ -name "${TICKET}-*.md"    -exec cp {} "${{ env.PLAN_DIR }}/" \; 2>/dev/null || true
+          find pr-staging/ -name "PLAN-${TICKET}.md" -exec cp {} "${{ env.PLAN_DIR }}/" \; 2>/dev/null || true
+          find pr-staging/ -path "*/assets/${TICKET}/*" ! -type d \
+            -exec cp {} "${{ env.ASSETS_DIR }}/" \; 2>/dev/null || true
+
+          echo "=== Files ready for commit ==="
+          find "${{ env.PLAN_DIR }}" "${{ env.ASSETS_DIR }}" -type f 2>/dev/null | sort
+
+      - name: Create feature branch and commit
+        id: commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TICKET="${{ env.TICKET }}"
+          BRANCH="feature/sdlc-${TICKET}-${{ github.run_id }}"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${BRANCH}"
+
+          git add "${{ env.PLAN_DIR }}/"  2>/dev/null || true
+          git add "${{ env.ASSETS_DIR }}/" 2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "::warning::Nothing to commit."
+            echo "empty=true" >> "$GITHUB_OUTPUT"
+          else
+            git commit \
+              -m "feat(${TICKET}): add SDLC planner artifacts [skip ci]" \
+              -m "Run: #${{ github.run_id }} | By: @${{ github.actor }}" \
+              -m "Jira: ${{ env.JIRA_URL }}/browse/${TICKET}" \
+              -m "Figma: ${{ env.FIGMA_URL }}"
+
+            git push origin "${BRANCH}"
+            echo "empty=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+
+      - name: Open Pull Request → master
+        if: steps.commit.outputs.empty != 'true'
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TICKET:   ${{ env.TICKET }}
+          BRANCH:   ${{ steps.commit.outputs.branch }}
+        run: |
+          PLAN_DIR="${{ env.PLAN_DIR }}"
+          ASSETS_DIR="${{ env.ASSETS_DIR }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          # Write PR body to a temp file — avoids YAML block-scalar indentation constraints
+          cat > /tmp/pr-body.md << PREOF
+          ## SDLC Planner Artifacts — ${TICKET}
+
+          > Auto-generated by the [Agentic SDLC Pipeline](${RUN_URL}) · @${{ github.actor }}
+
+          | Field | Value |
+          |-------|-------|
+          | Jira Ticket | [${TICKET}](${{ env.JIRA_URL }}/browse/${TICKET}) |
+          | Figma URL | ${{ env.FIGMA_URL }} |
+
+          ---
+
+          ### Artifacts
+
+          | File | Description |
+          |------|-------------|
+          | \`${PLAN_DIR}/${TICKET}-requirements.md\` | Requirements document |
+          | \`${PLAN_DIR}/${TICKET}-spec.md\` | Functional specification |
+          | \`${PLAN_DIR}/${TICKET}-testcases.md\` | Test case suite |
+          | \`${PLAN_DIR}/${TICKET}-design.md\` | E2E design with Mermaid diagrams |
+          | \`${PLAN_DIR}/PLAN-${TICKET}.md\` | SDLC execution plan (UI/API/QA/Deploy tracks) |
+          | \`${ASSETS_DIR}/\` | Jira file attachments |
+
+          ---
+
+          ### Review Checklist
+          - [ ] Requirements reviewed and approved
+          - [ ] Specification complete and accurate
+          - [ ] Test cases cover all acceptance criteria
+          - [ ] Architecture diagrams correct
+          - [ ] Execution plan tracks and targets verified
+          - [ ] Jira attachments present and correct
+
+          *Human approval required before merging.*
+          PREOF
+          # Strip the 10-space YAML indentation from the written file
+          sed -i 's/^          //' /tmp/pr-body.md
+
+          PR_URL=$(gh pr create \
+            --title "feat(${TICKET}): SDLC planner artifacts — $(date +%Y-%m-%d)" \
+            --body-file /tmp/pr-body.md \
+            --base  master \
+            --head  "${BRANCH}" \
+            --label "sdlc-agent,auto-generated" 2>/dev/null) \
+          || PR_URL=$(gh pr create \
+            --title "feat(${TICKET}): SDLC planner artifacts — $(date +%Y-%m-%d)" \
+            --body-file /tmp/pr-body.md \
+            --base  master \
+            --head  "${BRANCH}")
+
+          echo "pr_url=${PR_URL}" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Pull Request opened::${PR_URL}"
+
+      - name: Write job summary
+        if: always()
+        run: |
+          PR_URL="${{ steps.pr.outputs.pr_url }}"
+          {
+            echo "## Agentic SDLC Pipeline — ${{ env.TICKET }}"
+            echo ""
+            echo "| Step | Description | Status |"
+            echo "|------|-------------|--------|"
+            echo "| 0 | Inputs collected (Jira ID, URL, Figma URL) | ✅ |"
+            echo "| 1 | SDLC Planner Agent — 5 artifacts generated | ✅ |"
+            echo "| 2 | Pull Request raised → master | $([ -n "$PR_URL" ] && echo "✅" || echo "⚠️ skipped") |"
+            echo ""
+            echo "**Jira:** [${{ env.TICKET }}](${{ env.JIRA_URL }}/browse/${{ env.TICKET }})"
+            echo "**Figma:** ${{ env.FIGMA_URL }}"
+            [ -n "$PR_URL" ] && echo "**PR:** ${PR_URL}" || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
