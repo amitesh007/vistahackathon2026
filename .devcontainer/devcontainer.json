@@ -1,0 +1,57 @@
+{
+  // Codespace name shown in the VS Code title bar
+  "name": "LoanService + UI",
+
+  // Compose file that launches both application containers plus the devtools shell
+  "dockerComposeFile": "docker-compose.yml",
+
+  // The service that VS Code / Codespaces connects to as the "workspace" shell
+  "service": "devtools",
+
+  // Mount the repo root into the shell container
+  "workspaceFolder": "/workspace",
+
+  // Ports automatically forwarded to the outside world inside a Codespace.
+  // Port 8080 → LoanService REST API  (Postman / cURL / browser)
+  // Port 4200 → loan.service.ui       (browser)
+  "forwardPorts": [8080, 4200],
+
+  "portsAttributes": {
+    "8080": {
+      "label": "LoanService REST API",
+      "onAutoForward": "notify",
+      "visibility": "public",
+      "protocol": "https"
+    },
+    "4200": {
+      "label": "Loan Service UI",
+      "onAutoForward": "openBrowserOnce",
+      "visibility": "public",
+      "protocol": "https"
+    }
+  },
+
+  // Runs once the Codespace is live — prints the accessible URLs to the terminal
+  "postStartCommand": "bash /workspace/.devcontainer/post-start.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // REST client for quick API calls without leaving VS Code
+        "humao.rest-client",
+        // Thunder Client – lightweight Postman alternative
+        "rangav.vscode-thunder-client",
+        // Docker explorer
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "rest-client.environmentVariables": {
+          "$shared": {
+            "backendUrl": "https://{{codespace-name}}-8080.app.github.dev",
+            "frontendUrl": "https://{{codespace-name}}-4200.app.github.dev"
+          }
+        }
+      }
+    }
+  }
+}

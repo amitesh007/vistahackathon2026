@@ -1,0 +1,294 @@
+name: Docker Build & Deploy to Codespaces
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Builds Docker images for LoanService (Spring Boot) and loan.service.ui
+# (Angular/Nginx), pushes them to GHCR, then creates/refreshes a GitHub
+# Codespace so both services are live with public forwarded-port URLs.
+#
+# Forwarded URLs (set to public in Codespace):
+#   LoanService API  → https://<codespace-name>-8080.app.github.dev
+#   loan.service.ui  → https://<codespace-name>-4200.app.github.dev
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches:
+      - main
+      - 'develop/**'
+    paths:
+      - 'LoanService/**'
+      - 'loan.service.ui/**'
+      - '.devcontainer/**'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag (e.g. v1.0.0). Defaults to "latest".'
+        required: false
+        default: 'latest'
+      skip_codespace:
+        description: 'Set to "true" to skip Codespace creation (build images only)'
+        required: false
+        default: 'false'
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ── Job 1: Build & push LoanService (Spring Boot) image ──────────────────
+  build-backend:
+    name: Build & Push LoanService Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.resolve-tag.outputs.tag }}
+      image_ref: ${{ env.REGISTRY }}/${{ steps.owner.outputs.lower }}/loan-service:${{ steps.resolve-tag.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lowercase owner
+        id: owner
+        run: echo "lower=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image tag
+        id: resolve-tag
+        run: echo "tag=${{ github.event.inputs.tag || 'latest' }}" >> "$GITHUB_OUTPUT"
+
+      # No separate JAR step needed — the multi-stage Dockerfile builds it.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.owner.outputs.lower }}/loan-service
+          tags: |
+            type=raw,value=${{ steps.resolve-tag.outputs.tag }}
+            type=sha,prefix=sha-
+
+      - name: Build and push LoanService image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./LoanService
+          file: ./LoanService/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=loan-service
+          cache-to: type=gha,scope=loan-service,mode=max
+
+      - name: Summary – backend image
+        run: |
+          echo "### LoanService Image" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Job 2: Build & push loan.service.ui (Angular/Nginx) image ────────────
+  build-frontend:
+    name: Build & Push loan.service.ui Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_ref: ${{ env.REGISTRY }}/${{ steps.owner.outputs.lower }}/loan-service-ui:${{ steps.resolve-tag.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lowercase owner
+        id: owner
+        run: echo "lower=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image tag
+        id: resolve-tag
+        run: echo "tag=${{ github.event.inputs.tag || 'latest' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.owner.outputs.lower }}/loan-service-ui
+          tags: |
+            type=raw,value=${{ steps.resolve-tag.outputs.tag }}
+            type=sha,prefix=sha-
+
+      - name: Build and push loan.service.ui image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./loan.service.ui
+          file: ./loan.service.ui/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=loan-service-ui
+          cache-to: type=gha,scope=loan-service-ui,mode=max
+
+      - name: Summary – frontend image
+        run: |
+          echo "### loan.service.ui Image" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Job 3: Create / refresh Codespace and expose URLs ────────────────────
+  deploy-codespaces:
+    name: Deploy to GitHub Codespace
+    needs: [build-backend, build-frontend]
+    if: github.event.inputs.skip_codespace != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      codespaces: write
+    outputs:
+      codespace_name: ${{ steps.codespace.outputs.name }}
+      backend_url: ${{ steps.urls.outputs.backend_url }}
+      frontend_url: ${{ steps.urls.outputs.frontend_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lowercase owner
+        id: owner
+        run: echo "lower=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image tag
+        id: resolve-tag
+        run: echo "tag=${{ github.event.inputs.tag || 'latest' }}" >> "$GITHUB_OUTPUT"
+
+      # ── Reuse an existing Codespace on this branch, or create a new one ──
+      - name: Create or reuse Codespace
+        id: codespace
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+          BRANCH="${{ github.ref_name }}"
+
+          EXISTING=$(gh codespace list --repo "$REPO" --json name,branchName \
+            --jq ".[] | select(.branchName == \"$BRANCH\") | .name" 2>/dev/null | head -1)
+
+          if [ -n "$EXISTING" ]; then
+            echo "Reusing existing Codespace: $EXISTING"
+            echo "name=$EXISTING" >> "$GITHUB_OUTPUT"
+            # Rebuild so the container picks up the freshly pushed images
+            gh codespace rebuild --codespace "$EXISTING" 2>/dev/null || true
+          else
+            echo "Creating new Codespace on branch: $BRANCH"
+            NAME=$(gh codespace create \
+              --repo "$REPO" \
+              --branch "$BRANCH" \
+              --machine "standardLinux32gb" \
+              --json name --jq '.name')
+            echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Poll until the Codespace is in Available state (max ~5 min) ──────
+      - name: Wait for Codespace to be available
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CS_NAME: ${{ steps.codespace.outputs.name }}
+        run: |
+          echo "Polling state of Codespace: $CS_NAME"
+          for i in $(seq 1 30); do
+            STATE=$(gh codespace view --codespace "$CS_NAME" \
+              --json state --jq '.state' 2>/dev/null || echo "Unknown")
+            echo "  attempt $i/30 → state=$STATE"
+            [ "$STATE" = "Available" ] && { echo "Codespace is ready."; break; }
+            sleep 10
+          done
+
+      # ── Make ports publicly accessible (no auth required for consumers) ──
+      - name: Set port visibility to public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CS_NAME: ${{ steps.codespace.outputs.name }}
+        run: |
+          gh codespace ports visibility 8080:public --codespace "$CS_NAME" 2>/dev/null || true
+          gh codespace ports visibility 4200:public --codespace "$CS_NAME" 2>/dev/null || true
+
+      # ── Compute the stable forwarded-port URLs ────────────────────────────
+      - name: Compute forwarded-port URLs
+        id: urls
+        env:
+          CS_NAME: ${{ steps.codespace.outputs.name }}
+        run: |
+          BACKEND_URL="https://${CS_NAME}-8080.app.github.dev"
+          FRONTEND_URL="https://${CS_NAME}-4200.app.github.dev"
+          echo "backend_url=${BACKEND_URL}"  >> "$GITHUB_OUTPUT"
+          echo "frontend_url=${FRONTEND_URL}" >> "$GITHUB_OUTPUT"
+
+      # ── Write a rich job summary ──────────────────────────────────────────
+      - name: Write deployment summary
+        env:
+          TAG: ${{ steps.resolve-tag.outputs.tag }}
+          CS_NAME: ${{ steps.codespace.outputs.name }}
+          BACKEND_URL: ${{ steps.urls.outputs.backend_url }}
+          FRONTEND_URL: ${{ steps.urls.outputs.frontend_url }}
+          OWNER: ${{ steps.owner.outputs.lower }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Deployment Summary
+
+          | Item | Value |
+          |------|-------|
+          | Codespace | \`${CS_NAME}\` |
+          | Image tag | \`${TAG}\` |
+          | LoanService image | \`ghcr.io/${OWNER}/loan-service:${TAG}\` |
+          | UI image | \`ghcr.io/${OWNER}/loan-service-ui:${TAG}\` |
+
+          ---
+
+          ### Browser URLs
+
+          | Service | URL |
+          |---------|-----|
+          | **loan.service.ui** (Angular app) | ${FRONTEND_URL} |
+          | **LoanService API** (Spring Boot) | ${BACKEND_URL} |
+          | **H2 Console** (in-memory DB) | ${BACKEND_URL}/h2-console |
+
+          ---
+
+          ### Postman / cURL examples
+
+          ```
+          # Health
+          GET ${BACKEND_URL}/actuator/health
+
+          # List all loans
+          GET ${BACKEND_URL}/api/loan
+
+          # Create a loan
+          POST ${BACKEND_URL}/api/loan
+          Content-Type: application/json
+
+          # API proxy through UI (nginx → backend)
+          GET ${FRONTEND_URL}/api/loan
+          ```
+
+          > **Note:** Ports are set to **public** visibility — no authentication token needed in Postman.
+          EOF
