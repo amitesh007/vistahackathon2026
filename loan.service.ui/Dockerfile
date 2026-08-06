@@ -1,7 +1,8 @@
 # Multi-stage build for production Angular app
 
 # Stage 1: Build the Angular application
-FROM node:18-alpine AS build
+# Angular 21 requires Node.js >= 20
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
@@ -9,7 +10,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install all deps including devDependencies (Angular CLI is a devDep)
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
