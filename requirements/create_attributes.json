@@ -1,0 +1,112 @@
+﻿[
+    {
+        "SlNo":  "1",
+        "FieldName":  "transactionDate",
+        "ColumnName":  "TRANSACTION_DATE",
+        "DataType":  "LocalDate",
+        "Required":  "N",
+        "IsYNBoolean":  false,
+        "MaxSize":  -1,
+        "DefaultValue":  "",
+        "Description":  "The date the institution that services the loan receives the Borrower’s monthly installment. This institution is require"
+    },
+    {
+        "SlNo":  "2",
+        "FieldName":  "eventComment",
+        "ColumnName":  "EVENT_COMMENT",
+        "DataType":  "String",
+        "Required":  "N",
+        "IsYNBoolean":  false,
+        "MaxSize":  -1,
+        "DefaultValue":  "",
+        "Description":  "A description of the event."
+    },
+    {
+        "SlNo":  "3",
+        "FieldName":  "preventOnlineDeletionIndicator",
+        "ColumnName":  "PREVENT_ONLINE_DELETION_INDICATOR",
+        "DataType":  "Boolean",
+        "Required":  "N",
+        "IsYNBoolean":  true,
+        "MaxSize":  -1,
+        "DefaultValue":  "",
+        "Description":  "Prevents the user from deleting the loan."
+    },
+    {
+        "SlNo":  "4",
+        "FieldName":  "transactionDescription",
+        "ColumnName":  "TRANSACTION_DESCRIPTION",
+        "DataType":  "String",
+        "Required":  "N",
+        "IsYNBoolean":  false,
+        "MaxSize":  -1,
+        "DefaultValue":  "",
+        "Description":  "The description of the transaction."
+    },
+    {
+        "SlNo":  "5",
+        "FieldName":  "prorationTypeCode",
+        "ColumnName":  "PRORATION_TYPE_CODE",
+        "DataType":  "String",
+        "Required":  "N",
+        "IsYNBoolean":  false,
+        "MaxSize":  -1,
+        "DefaultValue":  "",
+        "Description":  "This field is used to select the cycle due or projected EOC due amount through API. The valid values are –\n•\tPCYCD: Proj"
+    },
+    {
+        "SlNo":  "6",
+        "FieldName":  "cycleId",
+        "ColumnName":  "CYCLE_ID",
+        "DataType":  "String",
+        "Required":  "N",
+        "IsYNBoolean":  false,
+        "MaxSize":  -1,
+        "DefaultValue":  "",
+        "Description":  "Used to Identify the cycle"
+    },
+    {
+        "SlNo":  "7",
+        "FieldName":  "applyToEarliestCycle",
+        "ColumnName":  "APPLY_TO_EARLIEST_CYCLE",
+        "DataType":  "Boolean",
+        "Required":  "N",
+        "IsYNBoolean":  true,
+        "MaxSize":  -1,
+        "DefaultValue":  "",
+        "Description":  "Boolean Parameter to identify if this should be applied to the earliest cycle or not"
+    },
+    {
+        "SlNo":  "8",
+        "FieldName":  "smeSystemSourceId",
+        "ColumnName":  "SME_SYSTEM_SOURCE_ID",
+        "DataType":  "String",
+        "Required":  "N",
+        "IsYNBoolean":  false,
+        "MaxSize":  -1,
+        "DefaultValue":  "",
+        "Description":  "This attribute allows user to define the Source System in the Source System ID code table and use the same for mapping o"
+    },
+    {
+        "SlNo":  "9",
+        "FieldName":  "sourceRefNum",
+        "ColumnName":  "SOURCE_REF_NUM",
+        "DataType":  "String",
+        "Required":  "N",
+        "IsYNBoolean":  false,
+        "MaxSize":  -1,
+        "DefaultValue":  "",
+        "Description":  "This attribute allows the user to define the Source Reference Number at the transaction level, so that the same is taken"
+    },
+    {
+        "SlNo":  "10",
+        "FieldName":  "principalPaymentAmount",
+        "ColumnName":  "PRINCIPAL_PAYMENT_AMOUNT",
+        "DataType":  "BigDecimal",
+        "Required":  "N",
+        "IsYNBoolean":  false,
+        "MaxSize":  -1,
+        "DefaultValue":  "",
+        "Description":  "Attribute for Principal Payment Amount for INTPP (Pro Rate based on Principal) and INPPP (Pro Rate Shares Based on Parti"
+    }
+]

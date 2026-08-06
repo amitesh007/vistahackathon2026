@@ -1,0 +1,56 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/fin-lending/loan-service
+  tag: "latest"
+  pullPolicy: Always
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: "lending-private"
+  annotations: {}
+  hosts:
+    - host: loan-service.demo.local
+      paths:
+        - path: /api
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+livenessProbe:
+  tcpSocket:
+    port: 8080
+  initialDelaySeconds: 40
+  periodSeconds: 15
+
+readinessProbe:
+  tcpSocket:
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

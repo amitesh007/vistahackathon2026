@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "figma": {
+      "type": "http",
+      "url": "https://mcp.figma.com/sse",
+      "envFile": "${workspaceFolder}/.github/copilot/.env",
+      "headers": {
+        "X-Figma-Token": "${FIGMA_API_TOKEN}"
+      }
+    },
+    "jira": {
+      "type": "stdio",
+      "command": "node",
+      "args": [".github/JiraMCP/package/dist/index.js"],
+      "envFile": "${workspaceFolder}/.github/copilot/.env",
+      "env": {
+        "JIRA_URL": "${{ secrets.JIRA_URL }}",
+        "JIRA_EMAIL": "${{ secrets.JIRA_EMAIL }}",
+        "JIRA_API_TOKEN": "${{ secrets.JIRA_API_TOKEN }}",
+        "JIRA_AUTH_TYPE": "bearer",
+        "JIRA_API_VERSION": "2"
+      }
+    }
+  }
+}

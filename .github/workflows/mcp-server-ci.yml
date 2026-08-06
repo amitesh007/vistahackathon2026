@@ -1,0 +1,58 @@
+name: Jira MCP Server — Build & Verify
+
+on:
+  push:
+    paths:
+      - "mcp-server/**"
+      - ".github/mcp.json"
+      - ".github/workflows/mcp-server-ci.yml"
+  pull_request:
+    paths:
+      - "mcp-server/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build MCP Server
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check & compile
+        run: npm run build
+
+      - name: Verify server starts (smoke test)
+        # Sends an MCP initialize request over stdin, expects a valid JSON response,
+        # then immediately sends a shutdown. Exit 0 == server responded correctly.
+        env:
+          JIRA_URL: https://example.atlassian.net
+          JIRA_EMAIL: test@example.com
+          JIRA_API_TOKEN: dummy-token-for-smoke-test
+        run: |
+          INIT_MSG='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci-smoke","version":"0"}}}'
+          RESPONSE=$(echo "$INIT_MSG" | timeout 10 node dist/index.js 2>/dev/null || true)
+          echo "Server response: $RESPONSE"
+          echo "$RESPONSE" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); assert 'result' in d, 'unexpected response'"
+          echo "Smoke test passed."
+
+      - name: Upload compiled artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-server-dist
+          path: mcp-server/dist/
+          retention-days: 7

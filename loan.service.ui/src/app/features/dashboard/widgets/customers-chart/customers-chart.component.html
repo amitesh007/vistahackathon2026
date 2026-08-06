@@ -1,0 +1,29 @@
+<div class="customers-chart card">
+  <div class="card-header">
+    <h3 class="card-title">Customers Onboarded</h3>
+    <div class="year-dropdown">
+      <select [(ngModel)]="selectedYear" (change)="onYearChange(selectedYear)">
+        <option value="2024">2024</option>
+        <option value="2023">2023</option>
+        <option value="2022">2022</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card-body">
+    <div class="chart-legend">
+      <div *ngFor="let dataset of chartData.datasets" class="legend-item">
+        <span class="legend-color" [style.background-color]="dataset.color"></span>
+        <span class="legend-label">{{ dataset.label }}</span>
+      </div>
+    </div>
+
+    <div class="chart-container">
+      <canvas #chartCanvas width="700" height="300"></canvas>
+    </div>
+
+    <div class="chart-labels">
+      <span *ngFor="let label of chartData.labels" class="chart-label">{{ label }}</span>
+    </div>
+  </div>
+</div>

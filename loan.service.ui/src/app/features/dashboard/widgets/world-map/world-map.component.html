@@ -1,0 +1,39 @@
+<div class="world-map card">
+  <div class="card-body">
+    <div class="map-container">
+      <!-- Simplified world map visualization -->
+      <div class="map-regions">
+        <button 
+          *ngFor="let region of regions; let i = index" 
+          class="map-region"
+          [class.active]="region.active"
+          [style.left.%]="15 + (i * 15)"
+          [style.top.%]="30 + ((i % 3) * 15)"
+          (click)="selectRegion(region)">
+          <svg class="region-icon" width="60" height="60" viewBox="0 0 60 60">
+            <defs>
+              <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#694ED6;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#C137A2;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+            <circle cx="30" cy="30" r="4" [attr.fill]="region.active ? 'url(#gradient)' : '#E0E0E0'"/>
+            <circle cx="30" cy="30" r="8" fill="none" [attr.stroke]="region.active ? '#694ED6' : '#E0E0E0'" stroke-width="1" opacity="0.3"/>
+            <circle cx="30" cy="30" r="12" fill="none" [attr.stroke]="region.active ? '#694ED6' : '#E0E0E0'" stroke-width="1" opacity="0.2"/>
+          </svg>
+          <span class="region-label" *ngIf="region.active">{{ region.name }}</span>
+        </button>
+      </div>
+      
+      <!-- Decorative grid lines -->
+      <svg class="map-grid" viewBox="0 0 800 200" preserveAspectRatio="none">
+        <defs>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#f0f0f0" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)" />
+      </svg>
+    </div>
+  </div>
+</div>

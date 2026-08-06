@@ -1,0 +1,40 @@
+<div class="calendar-widget card">
+  <div class="card-header">
+    <h3 class="card-title">Calendar</h3>
+  </div>
+
+  <div class="card-body">
+    <div class="calendar-header">
+      <button class="nav-button" (click)="previousMonth()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10 12L6 8l4-4"/>
+        </svg>
+      </button>
+      <div class="calendar-month">
+        <span class="month-name">{{ currentMonth }} {{ currentYear }}</span>
+      </div>
+      <button class="nav-button" (click)="nextMonth()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6 12l4-4-4-4"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="calendar-grid">
+      <div *ngFor="let day of weekDays" class="calendar-weekday">
+        {{ day }}
+      </div>
+      
+      <button 
+        *ngFor="let day of calendarDays" 
+        class="calendar-day"
+        [class.empty]="!day"
+        [class.today]="isToday(day)"
+        [class.selected]="day === selectedDay"
+        (click)="selectDay(day)"
+        [disabled]="!day">
+        {{ day || '' }}
+      </button>
+    </div>
+  </div>
+</div>

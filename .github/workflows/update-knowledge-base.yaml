@@ -1,0 +1,269 @@
+name: Knowledge Base — Auto-Update
+
+# ---------------------------------------------------------------------------
+# Triggers whenever source code changes land on the default branch (master).
+# Paths under Doc/ and this workflow file are excluded to prevent recursive
+# runs. Manual dispatch is also available for testing or backfills.
+# ---------------------------------------------------------------------------
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - "Doc/**"
+      - ".github/workflows/update-knowledge-base.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  models: read
+
+jobs:
+  update-knowledge-base:
+    name: Detect Changes & Sync Knowledge Base
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout with enough history to diff the latest commit
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      # -----------------------------------------------------------------------
+      # 2. Detect which source files changed and categorise into areas
+      # -----------------------------------------------------------------------
+      - name: Detect changed source files and areas
+        id: detect
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null \
+            | grep -v "^Doc/" \
+            | grep -v "^\.github/workflows/update-knowledge-base\.yaml$" \
+            || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No source code changes detected outside Doc/ — skipping update."
+            exit 0
+          fi
+
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          printf "%s" "$CHANGED" > /tmp/changed_files.txt
+
+          {
+            echo "changed_files<<CHANGED_EOF"
+            cat /tmp/changed_files.txt
+            echo "CHANGED_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          # Categorise changes into logical areas
+          AREAS=""
+          grep -q "^loan\.service\.ui/"  /tmp/changed_files.txt 2>/dev/null && AREAS="$AREAS angular"
+          grep -q "^LoanService/"        /tmp/changed_files.txt 2>/dev/null && AREAS="$AREAS java-backend"
+          grep -q "^agent/"             /tmp/changed_files.txt 2>/dev/null && AREAS="$AREAS agent"
+          grep -q "^mcp-server/"        /tmp/changed_files.txt 2>/dev/null && AREAS="$AREAS mcp-server"
+          grep -q "^helm/"              /tmp/changed_files.txt 2>/dev/null && AREAS="$AREAS infrastructure"
+          grep -q "^\.github/"          /tmp/changed_files.txt 2>/dev/null && AREAS="$AREAS ci-cd"
+          AREAS=$(echo "$AREAS" | xargs)
+
+          echo "changed_areas=$AREAS" >> "$GITHUB_OUTPUT"
+          echo "Detected changed areas: $AREAS"
+          echo "---"
+          echo "Changed files:"
+          cat /tmp/changed_files.txt
+
+      # -----------------------------------------------------------------------
+      # 3. Map changed areas to the target Doc files
+      # -----------------------------------------------------------------------
+      - name: Resolve target Doc files from changed areas
+        if: steps.detect.outputs.has_changes == 'true'
+        id: mapping
+        run: |
+          AREAS="${{ steps.detect.outputs.changed_areas }}"
+          DOCS=""
+
+          echo "$AREAS" | grep -q "angular"        && DOCS="$DOCS Doc/02-angular-standards.md Doc/05-angular-ui-architecture.md Doc/07-api-integration-patterns.md"
+          echo "$AREAS" | grep -q "java-backend"   && DOCS="$DOCS Doc/06-java-backend-architecture.md Doc/09-database-patterns.md"
+          echo "$AREAS" | grep -q "agent"          && DOCS="$DOCS Doc/04-agent-architecture.md Doc/10-code-generation-guide.md"
+          echo "$AREAS" | grep -q "mcp-server"     && DOCS="$DOCS Doc/04-agent-architecture.md"
+          echo "$AREAS" | grep -q "infrastructure" && DOCS="$DOCS Doc/01-project-overview.md"
+          echo "$AREAS" | grep -q "ci-cd"          && DOCS="$DOCS Doc/10-code-generation-guide.md"
+
+          # Always include the index and README; deduplicate
+          DOCS=$(echo "$DOCS Doc/00-index.md Doc/README.md" | tr ' ' '\n' | grep "^Doc/" | sort -u | tr '\n' ' ' | xargs)
+          echo "docs=$DOCS" >> "$GITHUB_OUTPUT"
+          echo "Target Doc files: $DOCS"
+
+      # -----------------------------------------------------------------------
+      # 4. Capture code diff for LLM context (capped at 8 KB)
+      # -----------------------------------------------------------------------
+      - name: Collect code diff for LLM context
+        if: steps.detect.outputs.has_changes == 'true'
+        run: |
+          git diff HEAD~1 HEAD \
+            -- ':!Doc/**' ':!.github/workflows/update-knowledge-base.yaml' \
+            2>/dev/null | head -c 8192 > /tmp/code_diff.txt || true
+          echo "Diff captured: $(wc -c < /tmp/code_diff.txt) bytes"
+
+      # -----------------------------------------------------------------------
+      # 5. Use GitHub Models to intelligently update each target Doc file.
+      #    Falls back to a deterministic changelog stamp if the API is
+      #    unavailable (no token, rate-limited, etc.).
+      # -----------------------------------------------------------------------
+      - name: Update Doc files via GitHub Models
+        if: steps.detect.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANGED_AREAS: ${{ steps.detect.outputs.changed_areas }}
+          CHANGED_FILES: ${{ steps.detect.outputs.changed_files }}
+          TARGET_DOCS: ${{ steps.mapping.outputs.docs }}
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+          DIFF=$(cat /tmp/code_diff.txt)
+
+          for DOC in $TARGET_DOCS; do
+            [ -f "$DOC" ] || { echo "::warning::$DOC not found — skipping"; continue; }
+            echo "--- Processing: $DOC ---"
+
+            CURRENT=$(head -c 3500 "$DOC")
+
+            # Build the prompt using jq --arg to safely handle all special chars
+            PROMPT=$(jq -rn \
+              --arg today   "$TODAY" \
+              --arg areas   "$CHANGED_AREAS" \
+              --arg files   "$CHANGED_FILES" \
+              --arg diff    "$DIFF" \
+              --arg doc     "$DOC" \
+              --arg current "$CURRENT" \
+              '"You are a documentation maintainer for a full-stack loan service platform (Angular 21 + Spring Boot 3.2.5 + Java 17).\n\nToday: \($today)\nChanged source areas: \($areas)\nChanged files:\n\($files)\n\nCode diff (8 KB max):\n\($diff)\n\nCurrent content of \($doc) (3500 chars max):\n\($current)\n\nTask:\n1. Review the code changes that are relevant to \($doc).\n2. Update ONLY the directly affected sections — preserve all other content verbatim.\n3. Update or add a `Last Updated: \($today)` line if one already exists in the document.\n4. If this document does NOT need any changes, reply with exactly the text: NO_CHANGE\n5. Otherwise, output the complete updated document — no preamble, no explanation."')
+
+            RESPONSE=$(curl -s -f -X POST \
+              "https://models.inference.ai.azure.com/chat/completions" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --max-time 60 \
+              -d "$(jq -n --arg p "$PROMPT" \
+                '{model:"gpt-4o-mini",messages:[{role:"user",content:$p}],max_tokens:3000,temperature:0.1}')" \
+              2>/tmp/models_error.txt || true)
+
+            if [ -z "$RESPONSE" ]; then
+              ERR=$(cat /tmp/models_error.txt 2>/dev/null | head -1 || true)
+              echo "::warning::GitHub Models unavailable for $DOC (${ERR:-no details}) — applying deterministic fallback."
+              # Fallback: append a hidden update marker so the file is committed and tracked
+              printf '\n<!-- kb-auto-update: %s | areas: %s -->\n' "$TODAY" "$CHANGED_AREAS" >> "$DOC"
+              continue
+            fi
+
+            CONTENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "NO_CHANGE"')
+
+            if [ "$CONTENT" = "NO_CHANGE" ] || [ -z "$CONTENT" ]; then
+              echo "$DOC: no update required."
+            else
+              echo "$CONTENT" > "$DOC"
+              echo "$DOC: updated."
+            fi
+          done
+
+          # Always bump the Last Updated stamp in Doc/README.md
+          if [ -f "Doc/README.md" ]; then
+            sed -i "s/\*\*Last Updated:\*\* [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/\*\*Last Updated:\*\* ${TODAY}/" Doc/README.md
+          fi
+
+      # -----------------------------------------------------------------------
+      # 6. Configure git, create a new branch, and commit the Doc changes
+      # -----------------------------------------------------------------------
+      - name: Configure git identity
+        if: steps.detect.outputs.has_changes == 'true'
+        run: |
+          git config user.name  "kb-update-bot"
+          git config user.email "kb-update-bot@users.noreply.github.com"
+
+      - name: Create PR branch and commit changes
+        if: steps.detect.outputs.has_changes == 'true'
+        id: commit
+        run: |
+          BRANCH="kb/auto-update-${{ github.run_id }}"
+          git checkout -b "$BRANCH"
+
+          git add Doc/
+          if git diff --cached --quiet; then
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+            echo "Knowledge base is already up to date — no commit needed."
+          else
+            git commit -m "docs: auto-update knowledge base [skip ci] | areas: ${{ steps.detect.outputs.changed_areas }} | commit: ${{ github.sha }} | run: ${{ github.run_id }}"
+
+            git push origin "$BRANCH"
+            echo "committed=true"  >> "$GITHUB_OUTPUT"
+            echo "branch=$BRANCH"  >> "$GITHUB_OUTPUT"
+            echo "Committed and pushed to $BRANCH"
+          fi
+
+      # -----------------------------------------------------------------------
+      # 7. Open one Pull Request targeting master
+      # -----------------------------------------------------------------------
+      - name: Open Pull Request
+        if: steps.detect.outputs.has_changes == 'true' && steps.commit.outputs.committed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="${{ steps.commit.outputs.branch }}"
+          AREAS="${{ steps.detect.outputs.changed_areas }}"
+          FILES="${{ steps.detect.outputs.changed_files }}"
+          SHA="${{ github.sha }}"
+          RUN_ID="${{ github.run_id }}"
+
+          printf '%s\n' \
+            '## Knowledge Base Auto-Update' \
+            '' \
+            "This PR was **automatically generated** by the \`update-knowledge-base\` workflow after source code changes were detected on \`master\`." \
+            '' \
+            '| Field | Value |' \
+            '|---|---|' \
+            "| **Source commit** | \`${SHA:0:8}\` |" \
+            "| **Workflow run** | [\`${RUN_ID}\`](../../actions/runs/${RUN_ID}) |" \
+            "| **Changed areas** | \`${AREAS}\` |" \
+            '' \
+            '### Changed Source Files' \
+            '```' \
+            "${FILES}" \
+            '```' \
+            '' \
+            '### Review Checklist' \
+            '- [ ] Updated `Doc/` files accurately reflect the code changes' \
+            '- [ ] No sensitive information or secrets included' \
+            '- [ ] Document structure and formatting preserved' \
+            '- [ ] Ready to merge and keep the knowledge base in sync with the codebase' \
+            '' \
+            '***' \
+            '*Auto-generated by **kb-update-bot***' > /tmp/pr_body.md
+
+          gh pr create \
+            --title "docs: sync knowledge base with code changes (run ${RUN_ID})" \
+            --body-file /tmp/pr_body.md \
+            --base  master \
+            --head  "$BRANCH" \
+          || echo "::warning::PR creation failed — a PR for this branch may already exist."
+
+      # -----------------------------------------------------------------------
+      # 8. Write a job summary
+      # -----------------------------------------------------------------------
+      - name: Write job summary
+        if: always()
+        run: |
+          {
+            echo "## Knowledge Base Update — Summary"
+            echo ""
+            if [ "${{ steps.detect.outputs.has_changes }}" != "true" ]; then
+              echo "No source code changes detected outside \`Doc/\`. Knowledge base update skipped."
+            elif [ "${{ steps.commit.outputs.committed }}" = "true" ]; then
+              echo "**Result:** Knowledge base updated and PR raised ✅"
+              echo ""
+              echo "**PR branch:** \`${{ steps.commit.outputs.branch }}\`"
+              echo "**Changed areas:** \`${{ steps.detect.outputs.changed_areas }}\`"
+            else
+              echo "**Result:** No \`Doc/\` changes needed — knowledge base is already up to date."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

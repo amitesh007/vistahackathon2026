@@ -1,0 +1,43 @@
+<div class="task-status card">
+  <div class="card-header">
+    <h3 class="card-title">Task Status</h3>
+  </div>
+
+  <div class="card-body">
+    <!-- Status Bars -->
+    <div class="status-bars">
+      <div *ngFor="let status of taskStatuses" class="status-bar">
+        <div class="status-info">
+          <span class="status-name">{{ status.name }}</span>
+          <span class="status-count">{{ status.count }}</span>
+        </div>
+        <div class="status-progress">
+          <div class="status-fill" [style.width.%]="status.percentage" [style.background-color]="status.color"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task Types Table -->
+    <div class="task-types">
+      <div class="task-types-header">
+        <h4>Task Type</h4>
+        <div class="task-types-columns">
+          <span>Completed</span>
+          <span>Pending</span>
+          <span>WIP</span>
+        </div>
+      </div>
+
+      <div class="task-types-body">
+        <div *ngFor="let task of taskTypes" class="task-type-row">
+          <div class="task-type-name">{{ task.name }}</div>
+          <div class="task-type-values">
+            <span class="task-value">{{ task.completed }}</span>
+            <span class="task-value">{{ task.pending }}</span>
+            <span class="task-value">{{ task.wip }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

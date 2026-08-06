@@ -1,0 +1,21 @@
+<div class="success-container">
+  <div class="success-card">
+    <div class="success-icon">
+      <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="9 12 11 14 15 10"></polyline>
+      </svg>
+    </div>
+    
+    <h1 class="success-title">Success!</h1>
+    <p class="success-message">{{ message }}</p>
+    
+    <button type="button" class="btn btn-primary" (click)="onReturn()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      Return
+    </button>
+  </div>
+</div>

@@ -1,0 +1,14 @@
+{
+  "className": "CreateLoanInterestPaymentIntegration",
+  "transaction": "TXN-SAMPLE-001",
+  "transactionDate": "2025-01-15",
+  "eventComment": "Monthly interest payment for loan LN-2025-001",
+  "preventOnlineDeletionIndicator": "N",
+  "transactionDescription": "Loan Interest Payment - January 2025",
+  "prorationTypeCode": "PCYCD",
+  "cycleId": "CYC-2025-01",
+  "applyToEarliestCycle": "Y",
+  "smeSystemSourceId": "CORE-BANKING-01",
+  "sourceRefNum": "SRC-REF-20250115-001",
+  "principalPaymentAmount": "5000.00"
+}

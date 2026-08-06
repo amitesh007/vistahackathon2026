@@ -1,0 +1,54 @@
+﻿{
+    "InputFields":  [
+                        {
+                            "SlNo":  "1",
+                            "FieldName":  "loanTransactionId",
+                            "ColumnName":  "LOAN_TRANSACTION_ID",
+                            "DataType":  "String",
+                            "Required":  "Y",
+                            "IsYNBoolean":  false,
+                            "MaxSize":  -1,
+                            "Description":  "1. Field is mandatory; must be provided to identify the transaction to be deleted.\n2. Must be a valid and existing Princ",
+                            "IsSystemMeta":  false,
+                            "Section":  "INPUT"
+                        }
+                    ],
+    "OutputFields":  [
+                         {
+                             "SlNo":  "1",
+                             "FieldName":  "Success",
+                             "ColumnName":  "SUCCESS",
+                             "DataType":  "Boolean",
+                             "Required":  "Y",
+                             "IsYNBoolean":  true,
+                             "MaxSize":  -1,
+                             "Description":  "1. Returns true if the transaction was deleted successfully; returns false if the deletion failed.",
+                             "IsSystemMeta":  true,
+                             "Section":  "OUTPUT"
+                         },
+                         {
+                             "SlNo":  "2",
+                             "FieldName":  "Message",
+                             "ColumnName":  "MESSAGE",
+                             "DataType":  "String",
+                             "Required":  "Y",
+                             "IsYNBoolean":  false,
+                             "MaxSize":  -1,
+                             "Description":  "1. Returns a list of informational, warning, or error messages generated during the delete operation.",
+                             "IsSystemMeta":  true,
+                             "Section":  "OUTPUT"
+                         },
+                         {
+                             "SlNo":  "3",
+                             "FieldName":  "updateTimeStamp",
+                             "ColumnName":  "UPDATE_TIME_STAMP",
+                             "DataType":  "LocalDateTime",
+                             "Required":  "Y",
+                             "IsYNBoolean":  false,
+                             "MaxSize":  -1,
+                             "Description":  "1. Returns the timestamp immediately after the delete operation was successfully executed.",
+                             "IsSystemMeta":  true,
+                             "Section":  "OUTPUT"
+                         }
+                     ]
+}

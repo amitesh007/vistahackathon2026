@@ -1,0 +1,24 @@
+<nav class="breadcrumb" *ngIf="breadcrumbs && breadcrumbs.length > 0">
+  <ol class="breadcrumb-list">
+    <li *ngFor="let breadcrumb of breadcrumbs; let last = last" class="breadcrumb-item">
+      <button 
+        *ngIf="!last" 
+        class="breadcrumb-link" 
+        (click)="navigateTo(breadcrumb.url)">
+        {{ breadcrumb.label }}
+      </button>
+      <span *ngIf="last" class="breadcrumb-current">
+        {{ breadcrumb.label }}
+      </span>
+      <svg 
+        *ngIf="!last" 
+        class="breadcrumb-separator" 
+        width="16" 
+        height="16" 
+        viewBox="0 0 16 16" 
+        fill="currentColor">
+        <path d="M6 12l4-4-4-4" stroke="currentColor" stroke-width="2" fill="none"/>
+      </svg>
+    </li>
+  </ol>
+</nav>

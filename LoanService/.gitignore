@@ -1,0 +1,21 @@
+# Gradle build outputs
+build/
+.gradle/
+bin/
+
+# Compiled class files
+*.class
+
+# JAR files
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+
+# Spring Boot
+*.log

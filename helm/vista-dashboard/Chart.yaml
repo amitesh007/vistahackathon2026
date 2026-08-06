@@ -1,0 +1,12 @@
+apiVersion: v2
+name: vista-dashboard
+description: Angular financial dashboard for Vista Hackathon 2026
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - angular
+  - dashboard
+  - fintech
+maintainers:
+  - name: Vista Team

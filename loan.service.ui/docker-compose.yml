@@ -1,0 +1,20 @@
+# Loan Service UI - Docker Compose Configuration
+version: '3.8'
+
+services:
+  loan-service-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: loan-service-ui
+    ports:
+      - "4200:80"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    networks:
+      - loan-network
+
+networks:
+  loan-network:
+    driver: bridge

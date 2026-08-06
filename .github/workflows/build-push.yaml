@@ -1,0 +1,231 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "What to run"
+        required: true
+        default: "build-and-deploy"
+        type: choice
+        options:
+          - build-only
+          - deploy-only
+          - build-and-deploy
+      tag:
+        description: "Image tag (e.g. v1.0.0). Used by both build and deploy."
+        required: false
+        default: "latest"
+      namespace:
+        description: "Kubernetes namespace to deploy into"
+        required: false
+        default: "vistahackathon26"
+
+env:
+  REGISTRY: ghcr.io
+  AKS_CLUSTER: p21m11c01500001
+
+jobs:
+  # ── Job 1: Build & push API image ─────────────────────────────────────────
+  build-api:
+    name: Build & Push API Image
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || contains(fromJson('["build-only","build-and-deploy"]'), github.event.inputs.action) }}
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: gradle
+
+      - name: Build JAR
+        working-directory: ./LoanService
+        run: ./gradlew bootJar --no-daemon
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./LoanService
+          file: ./LoanService/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/fin-lending/loan-service:${{ github.event.inputs.tag || 'latest' }}
+            ${{ env.REGISTRY }}/fin-lending/loan-service:sha-${{ github.sha }}
+          cache-from: type=gha,scope=loan-service
+          cache-to: type=gha,scope=loan-service,mode=max
+
+  # ── Job 2: Build & push UI image ──────────────────────────────────────────
+  build-ui:
+    name: Build & Push UI Image
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || contains(fromJson('["build-only","build-and-deploy"]'), github.event.inputs.action) }}
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push UI image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./loan.service.ui
+          file: ./loan.service.ui/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/fin-lending/loan-service-ui:${{ github.event.inputs.tag || 'latest' }}
+            ${{ env.REGISTRY }}/fin-lending/loan-service-ui:sha-${{ github.sha }}
+          cache-from: type=gha,scope=loan-service-ui
+          cache-to: type=gha,scope=loan-service-ui,mode=max
+
+  # ── Job 3: Build & push Vista Dashboard image ─────────────────────────────
+  build-dashboard:
+    name: Build & Push Dashboard Image
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || contains(fromJson('["build-only","build-and-deploy"]'), github.event.inputs.action) }}
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Dashboard image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./vista-dashboard
+          file: ./vista-dashboard/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/fin-lending/vista-dashboard:${{ github.event.inputs.tag || 'latest' }}
+            ${{ env.REGISTRY }}/fin-lending/vista-dashboard:sha-${{ github.sha }}
+          cache-from: type=gha,scope=vista-dashboard
+          cache-to: type=gha,scope=vista-dashboard,mode=max
+
+  # ── Job 4: Helm deploy ─────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to AKS
+    runs-on: ubuntu-latest
+    needs: [build-api, build-ui, build-dashboard]
+    if: |
+      always() &&
+      (github.event_name == 'push' || contains(fromJson('["deploy-only","build-and-deploy"]'), github.event.inputs.action)) &&
+      (needs.build-api.result == 'success' || needs.build-api.result == 'skipped') &&
+      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') &&
+      (needs.build-dashboard.result == 'success' || needs.build-dashboard.result == 'skipped')
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "latest"
+
+      - name: Set up kubeconfig
+        # KUBE_CONFIG secret: raw kubeconfig YAML for cluster p21m11c01500001
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Ensure namespace exists
+        run: |
+          kubectl create namespace ${{ github.event.inputs.namespace || 'vistahackathon26' }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create GHCR image pull secret
+        run: |
+          kubectl create secret docker-registry ghcr-pull-secret \
+            --namespace ${{ github.event.inputs.namespace || 'vistahackathon26' }} \
+            --docker-server=ghcr.io \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GITHUB_TOKEN }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy API (LoanService)
+        run: |
+          helm upgrade --install loan-service ./helm/loan-service \
+            --namespace ${{ github.event.inputs.namespace || 'vistahackathon26' }} \
+            -f ./helm/loan-service/values-demo.yaml \
+            --set image.repository=${{ env.REGISTRY }}/fin-lending/loan-service \
+            --set image.tag=${{ github.event.inputs.tag || 'latest' }} \
+            --rollback-on-failure \
+            --timeout 5m
+
+      - name: Deploy UI (loan-service-ui)
+        run: |
+          helm upgrade --install loan-service-ui ./helm/loan-service-ui \
+            --namespace ${{ github.event.inputs.namespace || 'vistahackathon26' }} \
+            -f ./helm/loan-service-ui/values-demo.yaml \
+            --set image.repository=${{ env.REGISTRY }}/fin-lending/loan-service-ui \
+            --set image.tag=${{ github.event.inputs.tag || 'latest' }} \
+            --rollback-on-failure \
+            --timeout 5m
+
+      - name: Deploy Vista Dashboard
+        run: |
+          helm upgrade --install vista-dashboard ./helm/vista-dashboard \
+            --namespace ${{ github.event.inputs.namespace || 'vistahackathon26' }} \
+            -f ./helm/vista-dashboard/values-demo.yaml \
+            --set image.repository=${{ env.REGISTRY }}/fin-lending/vista-dashboard \
+            --set image.tag=${{ github.event.inputs.tag || 'latest' }} \
+            --rollback-on-failure \
+            --timeout 5m
+
+      - name: Verify rollouts
+        run: |
+          kubectl rollout status deployment/loan-service \
+            --namespace ${{ github.event.inputs.namespace || 'vistahackathon26' }} --timeout=3m
+          kubectl rollout status deployment/loan-service-ui \
+            --namespace ${{ github.event.inputs.namespace || 'vistahackathon26' }} --timeout=3m
+          kubectl rollout status deployment/vista-dashboard \
+            --namespace ${{ github.event.inputs.namespace || 'vistahackathon26' }} --timeout=3m
+

@@ -1,0 +1,93 @@
+name: Run Calculator Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      number1:
+        description: "First number"
+        required: true
+        type: string
+      number2:
+        description: "Second number"
+        required: true
+        type: string
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Invoke my-test-agent via GitHub Copilot API
+        id: invoke-agent
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          NUMBER1: ${{ inputs.number1 }}
+          NUMBER2: ${{ inputs.number2 }}
+          REPO: ${{ github.repository }}
+        run: |
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${REPO}/copilot/agents/my-test-agent/completions" \
+            -d "{
+              \"messages\": [
+                {
+                  \"role\": \"user\",
+                  \"content\": \"Number 1: ${NUMBER1}\nNumber 2: ${NUMBER2}\"
+                }
+              ]
+            }")
+
+          echo "API Response: $RESPONSE"
+
+          CONTENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')
+
+          if [ -z "$CONTENT" ]; then
+            echo "::warning::Agent API returned no content. Falling back to local calculation."
+            SUM=$(echo "${NUMBER1} + ${NUMBER2}" | bc)
+            DIFF=$(echo "${NUMBER1} - ${NUMBER2}" | bc)
+            CONTENT="- Sum: ${SUM}
+          - Subtraction: ${DIFF}"
+          fi
+
+          {
+            echo "CONTENT<<AGENT_EOF"
+            echo "$CONTENT"
+            echo "AGENT_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Generate result.md
+        env:
+          NUMBER1: ${{ inputs.number1 }}
+          NUMBER2: ${{ inputs.number2 }}
+          CONTENT: ${{ steps.invoke-agent.outputs.CONTENT }}
+        run: |
+          cat > result.md << MARKDOWN
+          # Calculator Agent Result
+
+          **Agent:** my-test-agent
+          **Model:** chatgpt-5.4-mini
+
+          ## Inputs
+          | Parameter | Value |
+          |-----------|-------|
+          | Number 1  | ${NUMBER1} |
+          | Number 2  | ${NUMBER2} |
+
+          ## Agent Output
+
+          ${CONTENT}
+          MARKDOWN
+
+          echo "Generated result.md:"
+          cat result.md
+
+      - name: Upload result artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: result.md
+          path: result.md

@@ -1,0 +1,88 @@
+name: Run Calculator Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      number1:
+        description: "First number"
+        required: true
+        type: number
+      number2:
+        description: "Second number"
+        required: true
+        type: number
+
+jobs:
+  run-agent:
+    name: Invoke my-test-agent
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      models: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read agent definition
+        id: agent
+        run: |
+          # Extract the markdown body (everything after the YAML front-matter)
+          AGENT_FILE=".github/agents/my-test-agent.agent.md"
+          SYSTEM_PROMPT=$(awk '/^---/{if(++n==2){found=1;next}} found{print}' "$AGENT_FILE")
+          # Escape for JSON: replace backslash, double-quote, and newlines
+          SYSTEM_PROMPT_JSON=$(printf '%s' "$SYSTEM_PROMPT" \
+            | sed 's/\\/\\\\/g' \
+            | sed 's/"/\\"/g' \
+            | awk '{printf "%s\\n", $0}')
+          echo "system_prompt=$SYSTEM_PROMPT_JSON" >> "$GITHUB_OUTPUT"
+
+      - name: Invoke agent via GitHub Models API
+        id: invoke
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUMBER1: ${{ inputs.number1 }}
+          NUMBER2: ${{ inputs.number2 }}
+          SYSTEM_PROMPT: ${{ steps.agent.outputs.system_prompt }}
+        run: |
+          USER_MSG="Number 1: ${NUMBER1}\nNumber 2: ${NUMBER2}"
+
+          PAYLOAD=$(jq -n \
+            --arg sys "$SYSTEM_PROMPT" \
+            --arg usr "$USER_MSG" \
+            '{
+              model: "openai/gpt-4o-mini",
+              messages: [
+                { role: "system", content: $sys },
+                { role: "user",   content: $usr }
+              ]
+            }')
+
+          RESPONSE=$(curl -s \
+            -X POST "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          # Surface any API error immediately
+          if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+            echo "::error::GitHub Models API returned an error:"
+            echo "$RESPONSE" | jq '.error'
+            exit 1
+          fi
+
+          AGENT_OUTPUT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          echo "agent_output<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$AGENT_OUTPUT"     >> "$GITHUB_OUTPUT"
+          echo "EOF"               >> "$GITHUB_OUTPUT"
+
+      - name: Print agent output
+        run: |
+          echo "========================================"
+          echo "  Agent: my-test-agent (Calculator)"
+          echo "  Input:  Number 1 = ${{ inputs.number1 }}, Number 2 = ${{ inputs.number2 }}"
+          echo "========================================"
+          echo ""
+          echo "${{ steps.invoke.outputs.agent_output }}"
+          echo ""
+          echo "========================================"

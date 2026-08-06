@@ -1,0 +1,74 @@
+name: SDLC Deploy
+
+# =============================================================================
+# PHASE 3 of the SDLC harness. Fires when an IMPL PR (harness/exec/<KEY>) is
+# MERGED. Gated on qa_gate: passed (governance rule: no deploy until QA green).
+#
+# The `resolve` job gates the file: only a merged harness/exec/* PR proceeds.
+#
+# IMPORTANT: this file must live on the DEFAULT branch for the pull_request
+# trigger to fire.
+# =============================================================================
+
+on:
+  pull_request:
+    types: [closed]
+
+env:
+  PLANS_DIR: .github/agents/plans
+
+jobs:
+  resolve:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'harness/exec/')
+    runs-on: ubuntu-latest
+    outputs:
+      key: ${{ steps.k.outputs.key }}
+    steps:
+      - id: k
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          KEY="${HEAD_REF#harness/exec/}"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "Deploy phase for key: $KEY"
+
+  guard-deploy:
+    needs: resolve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}   # merged impl lives here
+      - name: Enforce QA-green gate
+        env:
+          JIRA_KEY: ${{ needs.resolve.outputs.key }}
+        run: |
+          PLAN="${PLANS_DIR}/PLAN-${JIRA_KEY}.md"
+          [ -f "$PLAN" ] || { echo "::error::Plan not found: $PLAN"; exit 1; }
+          QA=$(grep -m1 -E '^qa_gate:' "$PLAN" | sed -E 's/^qa_gate:[[:space:]]*//; s/[[:space:]]*$//' | tr -d "\"'")
+          echo "qa_gate='$QA'"
+          [ "$QA" = "passed" ] || { echo "::error::QA not green — governance rule blocks deploy until qa_gate: passed."; exit 1; }
+
+  deploy:
+    needs: [resolve, guard-deploy]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Invoke Deploy agent  # STUB — agent not built yet
+        env:
+          JIRA_KEY: ${{ needs.resolve.outputs.key }}
+        run: |
+          echo "::warning::Deploy agent not built — STUB. Real deploy = Docker -> GHCR -> Helm -> AKS."
+          echo "Reuse .github/workflows/build-push.yaml + helm/vista-dashboard/ here."
+      - name: Record deploy in run log (audit)
+        env:
+          JIRA_KEY: ${{ needs.resolve.outputs.key }}
+        run: |
+          printf '[%s] deploy dispatched — %s — run %s\n' \
+            "$(date -u +%FT%TZ)" "${JIRA_KEY}" "${{ github.run_id }}" >> "$GITHUB_STEP_SUMMARY"

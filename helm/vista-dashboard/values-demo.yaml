@@ -1,0 +1,30 @@
+# Overrides for the demo cluster environment
+replicaCount: 1
+
+image:
+  repository: ghcr.io/fin-lending/vista-dashboard
+  tag: "main"   # overridden by CI with the exact sha- tag
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: ghcr-pull-secret
+
+ingress:
+  enabled: true
+  className: "lending-private"
+  hosts:
+    - host: vista-dashboard.demo.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+autoscaling:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi

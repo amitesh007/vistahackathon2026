@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Debug LoanService (Attach)",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5005,
+      "preLaunchTask": "gradle: bootRun LoanService"
+    },
+    {
+      "type": "java",
+      "name": "Loan Service",
+      "request": "launch",
+      "mainClass": "LoanServiceApplication",
+      "classPaths": [
+        "${workspaceFolder}/LoanService/build/libs/LoanService-0.0.1-SNAPSHOT.jar"
+      ],
+      "vmArgs": "-Dspring.profiles.active=default -Dfile.encoding=UTF-8 -Dutils.path=./bin -Xmx8192M -Xms600M -Xss512M -XX:NewRatio=6 -Djava.util.Arrays.useLegacyMergeSort=true --add-exports=java.base/jdk.internal.loader=ALL-UNNAMED --add-opens=java.base/jdk.internal.loader=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED --add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=jdk.dynalink/jdk.dynalink.support=ALL-UNNAMED --add-opens=java.base/jdk.internal.math=ALL-UNNAMED --add-opens=java.desktop/com.sun.beans.introspect=ALL-UNNAMED",
+      "preLaunchTask": "gradle: build LoanService"
+    }
+    
+  ]
+}

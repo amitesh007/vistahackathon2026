@@ -1,0 +1,151 @@
+{
+  "_updated": "2026-08-06",
+  "_source": "Anthropic, OpenAI, and Google public pricing pages",
+  "anthropic": {
+    "claude-fable-5": {
+      "input_per_1m": 10.00,
+      "output_per_1m": 50.00,
+      "cache_read_per_1m": 1.00,
+      "cache_write_per_1m": 12.50
+    },
+    "claude-mythos-5": {
+      "input_per_1m": 10.00,
+      "output_per_1m": 50.00,
+      "cache_read_per_1m": 1.00,
+      "cache_write_per_1m": 12.50
+    },
+    "claude-opus-5": {
+      "input_per_1m": 5.00,
+      "output_per_1m": 25.00,
+      "cache_read_per_1m": 0.50,
+      "cache_write_per_1m": 6.25
+    },
+    "claude-opus-4-8": {
+      "input_per_1m": 5.00,
+      "output_per_1m": 25.00,
+      "cache_read_per_1m": 0.50,
+      "cache_write_per_1m": 6.25
+    },
+    "claude-opus-4-7": {
+      "input_per_1m": 5.00,
+      "output_per_1m": 25.00,
+      "cache_read_per_1m": 0.50,
+      "cache_write_per_1m": 6.25
+    },
+    "claude-opus-4-6": {
+      "input_per_1m": 5.00,
+      "output_per_1m": 25.00,
+      "cache_read_per_1m": 0.50,
+      "cache_write_per_1m": 6.25
+    },
+    "claude-sonnet-5": {
+      "input_per_1m": 3.00,
+      "output_per_1m": 15.00,
+      "cache_read_per_1m": 0.30,
+      "cache_write_per_1m": 3.75
+    },
+    "claude-sonnet-4-6": {
+      "input_per_1m": 3.00,
+      "output_per_1m": 15.00,
+      "cache_read_per_1m": 0.30,
+      "cache_write_per_1m": 3.75
+    },
+    "claude-sonnet-4-5": {
+      "input_per_1m": 3.00,
+      "output_per_1m": 15.00,
+      "cache_read_per_1m": 0.30,
+      "cache_write_per_1m": 3.75
+    },
+    "claude-haiku-4-5": {
+      "input_per_1m": 1.00,
+      "output_per_1m": 5.00,
+      "cache_read_per_1m": 0.10,
+      "cache_write_per_1m": 1.25
+    }
+  },
+  "openai": {
+    "gpt-4o": {
+      "input_per_1m": 2.50,
+      "output_per_1m": 10.00,
+      "cache_read_per_1m": 1.25
+    },
+    "gpt-4o-mini": {
+      "input_per_1m": 0.15,
+      "output_per_1m": 0.60,
+      "cache_read_per_1m": 0.075
+    },
+    "o3": {
+      "input_per_1m": 10.00,
+      "output_per_1m": 40.00,
+      "cache_read_per_1m": 2.50
+    },
+    "o3-mini": {
+      "input_per_1m": 1.10,
+      "output_per_1m": 4.40
+    },
+    "o4-mini": {
+      "input_per_1m": 1.10,
+      "output_per_1m": 4.40,
+      "cache_read_per_1m": 0.275
+    },
+    "gpt-4-turbo": {
+      "input_per_1m": 10.00,
+      "output_per_1m": 30.00
+    },
+    "o1": {
+      "input_per_1m": 15.00,
+      "output_per_1m": 60.00,
+      "cache_read_per_1m": 7.50
+    },
+    "o1-mini": {
+      "input_per_1m": 3.00,
+      "output_per_1m": 12.00
+    },
+    "gpt-3.5-turbo": {
+      "input_per_1m": 0.50,
+      "output_per_1m": 1.50,
+      "cache_read_per_1m": 0.25
+    },
+    "chatgpt-5.4-mini": {
+      "_note": "pricing unconfirmed — update when available; estimated similar to gpt-4o-mini",
+      "input_per_1m": 0.15,
+      "output_per_1m": 0.60
+    }
+  },
+  "google": {
+    "gemini-2.5-pro": {
+      "input_per_1m": 1.25,
+      "output_per_1m": 10.00,
+      "cache_read_per_1m": 0.3125
+    },
+    "gemini-2.5-flash": {
+      "input_per_1m": 0.15,
+      "output_per_1m": 0.60,
+      "cache_read_per_1m": 0.0375
+    },
+    "gemini-2.0-flash": {
+      "input_per_1m": 0.075,
+      "output_per_1m": 0.30,
+      "cache_read_per_1m": 0.01875
+    },
+    "gemini-2.0-flash-thinking": {
+      "input_per_1m": 0.15,
+      "output_per_1m": 0.60
+    },
+    "gemini-1.5-pro": {
+      "input_per_1m": 1.25,
+      "output_per_1m": 5.00,
+      "cache_read_per_1m": 0.3125
+    },
+    "gemini-1.5-flash": {
+      "input_per_1m": 0.075,
+      "output_per_1m": 0.30,
+      "cache_read_per_1m": 0.01875
+    },
+    "gemini-1.5-flash-8b": {
+      "input_per_1m": 0.0375,
+      "output_per_1m": 0.15,
+      "cache_read_per_1m": 0.009375
+    }
+  }
+}

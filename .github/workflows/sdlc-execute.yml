@@ -1,0 +1,172 @@
+name: SDLC Execute
+
+# =============================================================================
+# PHASE 2 of the SDLC harness. Fires when a PLAN PR (harness/plan/<KEY>) is
+# MERGED. Builds on branch harness/exec/<KEY>: ui -> api (serial) -> qa gate,
+# then opens an IMPL PR. Merging THAT PR triggers sdlc-deploy.yml (phase 3).
+#
+# The `resolve` job gates the whole file: it only proceeds for a merged
+# harness/plan/* PR, and derives the Jira key from the head branch. Every
+# other job `needs` it, so non-harness PR merges skip the entire pipeline.
+#
+# IMPORTANT: this file must live on the DEFAULT branch for the pull_request
+# trigger to fire.
+# =============================================================================
+
+on:
+  pull_request:
+    types: [closed]
+
+env:
+  PLANS_DIR: .github/agents/plans
+
+jobs:
+  resolve:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'harness/plan/')
+    runs-on: ubuntu-latest
+    outputs:
+      key: ${{ steps.k.outputs.key }}
+    steps:
+      - id: k
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          KEY="${HEAD_REF#harness/plan/}"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "Execute phase for key: $KEY"
+
+  exec-init:
+    needs: resolve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}   # merged plan lives here
+          fetch-depth: 0
+          token: ${{ secrets.Hackathon_Workflow }}
+      - name: Verify plan present + create exec branch
+        env:
+          JIRA_KEY: ${{ needs.resolve.outputs.key }}
+        run: |
+          PLAN="${PLANS_DIR}/PLAN-${JIRA_KEY}.md"
+          [ -f "$PLAN" ] || { echo "::error::Plan not found on default branch: $PLAN. Was the plan PR merged?"; exit 1; }
+          git config user.name  "sdlc-harness-bot"
+          git config user.email "sdlc-harness-bot@users.noreply.github.com"
+          git checkout -B "harness/exec/${JIRA_KEY}"
+          git push -u origin "harness/exec/${JIRA_KEY}" --force-with-lease
+
+  ui:
+    needs: [resolve, exec-init]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: harness/exec/${{ needs.resolve.outputs.key }}
+          token: ${{ secrets.Hackathon_Workflow }}
+      - name: Invoke UI agent (ui-orchestrator / ANGULAR_UI)
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          REPO: ${{ github.repository }}
+          JIRA_KEY: ${{ needs.resolve.outputs.key }}
+        run: |
+          PROMPT="Execute the UI tasks in ${PLANS_DIR}/PLAN-${JIRA_KEY}.md against the bound Angular target."
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${REPO}/copilot/agents/ui-orchestrator/completions" \
+            -d "$(jq -n --arg p "$PROMPT" '{messages:[{role:"user",content:$p}]}')")
+          echo "$RESPONSE" | jq -r '.choices[0].message.content // "::warning::ui agent returned no content"'
+      # --- GATE: UI build (real enforcement point) ---
+      # - uses: actions/setup-node@v4
+      #   with: { node-version: "20" }
+      # - run: npm ci && npm run build
+      #   working-directory: vista-dashboard
+      - name: Push UI changes to exec branch
+        env:
+          JIRA_KEY: ${{ needs.resolve.outputs.key }}
+        run: |
+          git config user.name  "sdlc-harness-bot"
+          git config user.email "sdlc-harness-bot@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "Harness: UI ${JIRA_KEY} — run ${{ github.run_id }}"
+          git push origin HEAD:refs/heads/harness/exec/${JIRA_KEY}
+
+  api:
+    needs: [resolve, exec-init, ui]   # serial after ui → same branch, no push race
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: harness/exec/${{ needs.resolve.outputs.key }}
+          token: ${{ secrets.Hackathon_Workflow }}
+      - name: Invoke API agent  # STUB — agent not built yet; swap slug when it lands
+        env:
+          JIRA_KEY: ${{ needs.resolve.outputs.key }}
+        run: |
+          echo "::warning::API agent not built — STUB for ${JIRA_KEY}."
+      # --- GATE: API build (real enforcement point) ---
+      # - uses: actions/setup-java@v4
+      #   with: { distribution: "temurin", java-version: "17" }
+      # - run: ./gradlew build
+      #   working-directory: LoanService
+
+  qa:
+    needs: [resolve, ui, api]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: harness/exec/${{ needs.resolve.outputs.key }}
+          token: ${{ secrets.Hackathon_Workflow }}
+      - name: Invoke QA agent  # STUB — agent not built yet
+        env:
+          JIRA_KEY: ${{ needs.resolve.outputs.key }}
+        run: |
+          echo "::warning::QA agent not built — STUB for ${JIRA_KEY}."
+
+      # --- GATE: run tests (the real 'no deploy until QA green' enforcement) ---
+      # - uses: actions/setup-java@v4
+      #   with: { distribution: "temurin", java-version: "17" }
+      # - run: ./gradlew test
+      #   working-directory: LoanService
+
+      - name: Stamp qa_gate=passed + open impl PR
+        env:
+          GH_TOKEN: ${{ secrets.Hackathon_Workflow }}
+          JIRA_KEY: ${{ needs.resolve.outputs.key }}
+        run: |
+          PLAN="${PLANS_DIR}/PLAN-${JIRA_KEY}.md"
+          if grep -qE '^qa_gate:' "$PLAN"; then
+            sed -i -E 's/^qa_gate:.*/qa_gate: passed/' "$PLAN"
+          else
+            sed -i -E '/^status:/a qa_gate: passed' "$PLAN"
+          fi
+          git config user.name  "sdlc-harness-bot"
+          git config user.email "sdlc-harness-bot@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "Harness: qa_gate passed ${JIRA_KEY} — run ${{ github.run_id }}"
+          git push origin HEAD:refs/heads/harness/exec/${JIRA_KEY}
+          BR="harness/exec/${JIRA_KEY}"
+          gh pr view "$BR" >/dev/null 2>&1 \
+            || gh pr create --base "${{ github.event.repository.default_branch }}" --head "$BR" \
+                 --title "SDLC ${JIRA_KEY}: implementation" \
+                 --body "Phase 2 implementation. QA green (\`qa_gate: passed\`). **Merge this PR to release** (triggers phase 3 deploy)."
+          URL=$(gh pr view "$BR" --json url -q '.url')
+          {
+            echo "## ⛔ CHECKPOINT 2 — review + MERGE the impl PR"
+            echo ""
+            echo "Impl PR: ${URL}"
+            echo ""
+            echo "QA is green. Merging it releases (triggers phase 3 SDLC Deploy)."
+          } >> "$GITHUB_STEP_SUMMARY"

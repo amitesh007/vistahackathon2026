@@ -1,0 +1,25 @@
+<div class="stat-card" [class]="'stat-card--' + color">
+  <div class="stat-card__icon">
+    <svg *ngIf="icon === 'users'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+      <circle cx="9" cy="7" r="4"></circle>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+    </svg>
+  </div>
+  
+  <div class="stat-card__content">
+    <p class="stat-card__title">{{ title }}</p>
+    <h3 class="stat-card__value">{{ value }}</h3>
+    
+    <div class="stat-card__trend" *ngIf="trendValue">
+      <svg *ngIf="trend === 'up'" class="trend-icon trend-icon--up" width="16" height="16" viewBox="0 0 16 16">
+        <path d="M8 12V4M12 8l-4-4-4 4" stroke="currentColor" stroke-width="2" fill="none"/>
+      </svg>
+      <svg *ngIf="trend === 'down'" class="trend-icon trend-icon--down" width="16" height="16" viewBox="0 0 16 16">
+        <path d="M8 4v8M12 8l-4 4-4-4" stroke="currentColor" stroke-width="2" fill="none"/>
+      </svg>
+      <span class="trend-value">{{ trendValue }}</span>
+    </div>
+  </div>
+</div>
