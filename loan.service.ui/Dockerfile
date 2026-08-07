@@ -15,6 +15,9 @@ RUN npm install --legacy-peer-deps
 # Copy source code
 COPY . .
 
+# Ensure required assets exist (may not be committed to source control)
+RUN mkdir -p src/assets && [ -f src/favicon.ico ] || touch src/favicon.ico
+
 # Build the application
 RUN npm run build:prod
 
