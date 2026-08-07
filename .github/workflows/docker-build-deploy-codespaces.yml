@@ -180,10 +180,25 @@ jobs:
         run: echo "tag=${{ github.event.inputs.tag || 'latest' }}" >> "$GITHUB_OUTPUT"
 
       # ── Reuse an existing Codespace on this branch, or create a new one ──
+      # REQUIRES: repo secret CODESPACES_PAT (classic PAT, scope: codespace)
+      # Create at: https://github.com/settings/tokens → "Generate new token (classic)"
+      # Scopes needed: codespace, repo
+      # Add as Actions secret: Settings → Secrets → Actions → New repository secret
+      - name: Verify CODESPACES_PAT secret is set
+        env:
+          PAT: ${{ secrets.CODESPACES_PAT }}
+        run: |
+          if [ -z "$PAT" ]; then
+            echo "::error::Secret CODESPACES_PAT is not set."
+            echo "::error::Create a classic PAT at https://github.com/settings/tokens"
+            echo "::error::with scopes: codespace, repo — then add it as a repo secret named CODESPACES_PAT."
+            exit 1
+          fi
+
       - name: Create or reuse Codespace
         id: codespace
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CODESPACES_PAT }}
         run: |
           REPO="${{ github.repository }}"
           BRANCH="${{ github.ref_name }}"
@@ -208,7 +223,7 @@ jobs:
       # ── Poll until the Codespace is in Available state (max ~5 min) ──────
       - name: Wait for Codespace to be available
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CODESPACES_PAT }}
           CS_NAME: ${{ steps.codespace.outputs.name }}
         run: |
           echo "Polling state of Codespace: $CS_NAME"
@@ -224,7 +239,7 @@ jobs:
       # ── Make ports publicly accessible (no auth required for consumers) ──
       - name: Set port visibility to public
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CODESPACES_PAT }}
           CS_NAME: ${{ steps.codespace.outputs.name }}
         run: |
           gh codespace ports visibility 8080:public --codespace "$CS_NAME" 2>/dev/null || true
