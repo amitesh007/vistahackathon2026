@@ -201,8 +201,7 @@ jobs:
             NAME=$(gh codespace create \
               --repo "$REPO" \
               --branch "$BRANCH" \
-              --machine "standardLinux32gb" \
-              --json name --jq '.name')
+              --machine "standardLinux32gb")
             echo "name=$NAME" >> "$GITHUB_OUTPUT"
           fi
 
@@ -220,6 +219,7 @@ jobs:
             [ "$STATE" = "Available" ] && { echo "Codespace is ready."; break; }
             sleep 10
           done
+          
 
       # ── Make ports publicly accessible (no auth required for consumers) ──
       - name: Set port visibility to public
